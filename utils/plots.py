@@ -4,6 +4,7 @@ Plotting utils
 """
 
 import math
+import os
 from copy import copy
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from utils.metrics import fitness
 
 # Settings
 CONFIG_DIR = user_config_dir()  # Ultralytics settings dir
+RANK = int(os.getenv('RANK', -1))
 matplotlib.rc('font', **{'size': 11})
 matplotlib.use('Agg')  # for writing to files only
 
@@ -55,12 +57,13 @@ def check_font(font='Arial.ttf', size=10):
     except Exception as e:  # download if missing
         url = "https://ultralytics.com/assets/" + font.name
         print(f'Downloading {url} to {font}...')
-        torch.hub.download_url_to_file(url, str(font))
+        torch.hub.download_url_to_file(url, str(font), progress=False)
         return ImageFont.truetype(str(font), size)
 
 
 class Annotator:
-    check_font()  # download TTF if necessary
+    if RANK in (-1, 0):
+        check_font()  # download TTF if necessary
 
     # YOLOv5 Annotator for train/val mosaics and jpgs and detect/hub inference annotations
     def __init__(self, im, line_width=None, font_size=None, font='Arial.ttf', pil=True):
@@ -80,9 +83,10 @@ class Annotator:
         if self.pil or not is_ascii(label):
             self.draw.rectangle(box, width=self.lw, outline=color)  # box
             if label:
-                w = self.font.getsize(label)[0]  # text width
+                w, h = self.font.getsize(label)  # text width
                 self.draw.rectangle([box[0], box[1] - self.fh, box[0] + w + 1, box[1] + 1], fill=color)
-                self.draw.text((box[0], box[1]), label, fill=txt_color, font=self.font, anchor='ls')
+                # self.draw.text((box[0], box[1]), label, fill=txt_color, font=self.font, anchor='ls')  # for PIL>8.0
+                self.draw.text((box[0], box[1] - h), label, fill=txt_color, font=self.font)
         else:  # cv2
             c1, c2 = (int(box[0]), int(box[1])), (int(box[2]), int(box[3]))
             cv2.rectangle(self.im, c1, c2, color, thickness=self.lw, lineType=cv2.LINE_AA)
